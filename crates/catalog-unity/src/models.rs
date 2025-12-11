@@ -418,9 +418,36 @@ pub struct TemporaryTableCredentials {
     pub azure_user_delegation_sas: Option<AzureUserDelegationSas>,
     pub gcp_oauth_token: Option<GcpOauthToken>,
     pub r2_temp_credentials: Option<R2TempCredentials>,
-    #[serde(with = "chrono::serde::ts_milliseconds")]
+    #[serde(with = "date_time_serde")]
     pub expiration_time: DateTime<Utc>,
-    pub url: String,
+    pub url: Option<String>,
+}
+
+mod date_time_serde {
+    use chrono::serde::*;
+    use chrono::{DateTime, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(date_time: &DateTime<Utc>, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        s.serialize_str(&date_time.timestamp().to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: Option<i64> = Option::deserialize(deserializer)?;
+        if let Some(s) = s {
+            return Ok(
+                DateTime::from_timestamp_micros(s).unwrap(),
+            );
+        }
+
+        Ok(DateTime::from_timestamp_micros(1796737740000).unwrap())
+    }
 }
 
 #[cfg(any(feature = "aws", feature = "r2"))]
@@ -479,11 +506,18 @@ impl TemporaryTableCredentials {
         None
     }
 
+    pub fn get_default_credentials(&self) -> Option<HashMap<String, String>> {
+        Some(HashMap::from([
+            ("".to_owned(), "".to_owned())
+        ]))
+    }
+
     pub fn get_credentials(self) -> Option<HashMap<String, String>> {
         self.get_aws_credentials()
             .or(self.get_azure_credentials())
             .or(self.get_gcp_credentials())
             .or(self.get_r2_credentials())
+            .or(self.get_default_credentials())
     }
 }
 
